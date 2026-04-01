@@ -6,6 +6,7 @@
  * Usage:
  *   const { scheduleDoublesRoundRobin } = require('./rr_scheduler');
  *   const players = ['A','B','C','D','E','F','G','H'];
+ *   const courts = ['court_1','court_3',court_5'];
  *   const schedule = scheduleDoublesRoundRobin(players, 2, 5);
  *
  * Returns an array of rounds. Each round is an object with `matches` and `sitOut`.
@@ -23,10 +24,10 @@ function makePlayers(p) {
     return arr;
 }
 
-function scheduleDoublesRoundRobin(playersInput, courts = 1, rounds = 1) {
+function scheduleDoublesRoundRobin(playersInput, courts, rounds = 1) {
     const players = makePlayers(playersInput);
     const n = players.length;
-    const maxMatchesPerRound = Math.min(courts, Math.floor(n / 4));
+    const maxMatchesPerRound = Math.min(courts.length, Math.floor(n / 4));
 
     const teammateCounts = new Map();
     const opponentCounts = new Map();
@@ -34,7 +35,17 @@ function scheduleDoublesRoundRobin(playersInput, courts = 1, rounds = 1) {
     const preferredSideCounts = new Map();
 
     const NUM_COURTS = 9;
-    const courtPreferredSide = Array.from({ length: NUM_COURTS }, (_, k) => (k % 2 === 0 ? 'left' : 'right'));
+    const courtPreferredSide = new Map([
+        ['court_1','receive'],
+        ['court_2','receive'],
+        ['court_3','receive'],
+        ['court_4','receive'],
+        ['court_5','serve'],
+        ['court_6','serve'],
+        ['court_7','serve'],
+        ['court_8','serve'],                                                        
+        ['court_9','serve'],
+    ])
 
     function tcount(a, b) { return teammateCounts.get(key(a, b)) || 0; }
     function ocount(a, b) { return opponentCounts.get(key(a, b)) || 0; }
@@ -59,7 +70,7 @@ function scheduleDoublesRoundRobin(playersInput, courts = 1, rounds = 1) {
             for (let i = 0; i < available.length; i++) {
                 const cand = available[i];
                 const score = tcount(A, cand);
-                if (score < bestBScore) { bestBScore = score; bestBIdx = i; }
+                if (score < bestBScore) { bestBScore = score; bestBIdx = i; } 
             }
             const B = available.splice(bestBIdx, 1)[0];
 
@@ -84,7 +95,7 @@ function scheduleDoublesRoundRobin(playersInput, courts = 1, rounds = 1) {
             // decide server (equalize serves, tie by original order)
             const matchPlayers = [A, B, C, D];
             let server = matchPlayers[0];
-            for (const p of matchPlayers) {
+            for (const p of matchPlayers) { 
                 const pc = sCount(p), sc = sCount(server);
                 if (pc < sc || (pc === sc && players.indexOf(p) < players.indexOf(server))) server = p;
             }
@@ -92,7 +103,7 @@ function scheduleDoublesRoundRobin(playersInput, courts = 1, rounds = 1) {
             const servingTeam = (server === A || server === B) ? 1 : 2;
 
             // decide preferred side
-            const prefSide = courtPreferredSide[(courtNo - 1) % NUM_COURTS];
+            const prefSide = courtPreferredSide[corts(courtNo - 1)];
             const team1PrefSum = (preferredSideCounts.get(A) || 0) + (preferredSideCounts.get(B) || 0);
             const team2PrefSum = (preferredSideCounts.get(C) || 0) + (preferredSideCounts.get(D) || 0);
             let givePrefToTeam1 = team1PrefSum < team2PrefSum ? true : team1PrefSum > team2PrefSum ? false : null;
