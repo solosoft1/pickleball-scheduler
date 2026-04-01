@@ -1,0 +1,11 @@
+{
+    "name": "pickle-scheduler",
+    "version": "0.1.0",
+    "type": "commonjs",
+    "scripts": {
+        "test": "jest"
+    },
+    "devDependencies": {
+        "jest": "^29.0.0"
+    }
+}
