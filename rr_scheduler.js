@@ -24,6 +24,22 @@ function makePlayers(p) {
     return arr;
 }
 
+function shuffle(array) {
+    // Fisher-Yates shuffle
+    let currentIndex = array.length;
+    while (currentIndex !== 0) {
+        // Pick a remaining element
+        let randomIndex = Math.floor(Math.random() * currentIndex);
+        currentIndex--;
+
+        // And swap it with the current element
+        let temporaryValue = array[currentIndex];
+        array[currentIndex] = array[randomIndex];
+        array[randomIndex] = temporaryValue;
+    }
+    return array;
+}
+
 function scheduleDoublesRoundRobin(playersInput, courts, rounds = 1) {
     const players = makePlayers(playersInput);
     const n = players.length;
@@ -33,18 +49,17 @@ function scheduleDoublesRoundRobin(playersInput, courts, rounds = 1) {
     const opponentCounts = new Map();
     const serveCounts = new Map();
     const preferredSideCounts = new Map();
-
-    const NUM_COURTS = 9;
+    const CourtSide = Object.freeze({ SERVE: 'serve', RECEIVE: 'receive' });  
     const courtPreferredSide = new Map([
-        ['court_1','receive'],
-        ['court_2','receive'],
-        ['court_3','receive'],
-        ['court_4','receive'],
-        ['court_5','serve'],
-        ['court_6','serve'],
-        ['court_7','serve'],
-        ['court_8','serve'],                                                        
-        ['court_9','serve'],
+        ['court_1',CourtSide.RECEIVE],
+        ['court_2',CourtSide.RECEIVE],
+        ['court_3',CourtSide.RECEIVE],
+        ['court_4',CourtSide.RECEIVE],
+        ['court_5',CourtSide.SERVE],
+        ['court_6',CourtSide.SERVE],
+        ['court_7',CourtSide.SERVE],
+        ['court_8',CourtSide.SERVE],                                                        
+        ['court_9',CourtSide.SERVE],
     ])
 
     function tcount(a, b) { return teammateCounts.get(key(a, b)) || 0; }
@@ -57,61 +72,84 @@ function scheduleDoublesRoundRobin(playersInput, courts, rounds = 1) {
     const schedule = [];
 
     for (let r = 0; r < rounds; r++) {
-        const available = players.slice();
+        const availablePlayers = shuffle(players.slice());
+        const availableCourts = shuffle(courts.slice() );
         const matches = [];
         let courtNo = 1;
 
-        while (matches.length < maxMatchesPerRound && available.length >= 4) {
-            const A = available.shift();
+        while (matches.length < maxMatchesPerRound && availablePlayers.length >= 4) {
+            const A = availablePlayers.shift();
 
             // choose partner B minimizing prior teammate count
             let bestBIdx = 0;
             let bestBScore = Infinity;
-            for (let i = 0; i < available.length; i++) {
-                const cand = available[i];
+            let bestOScore = Infinity;
+            const tieCandidates = [];
+            for (let i = 0; i < availablePlayers.length; i++) {
+                const cand = availablePlayers[i];
                 const score = tcount(A, cand);
-                if (score < bestBScore) { bestBScore = score; bestBIdx = i; } 
+    //If multiple candidates have same score, select candidate with minimal opponent interactions with remaining players. 
+
+                if (score < bestBScore) { 
+                    bestBScore = score; 
+                    bestBIdx = i;
+                    bestOScore = ocount(cand,i); 
+                    tieCandidates.length = 0;} 
+                else if(score === bestBScore) { 
+                    const oScore = ocount(cand,i);
+                    if(oScore < bestOScore) {
+                        bestBIdx = i;
+                        bestOScore = oScore;
+                    }
+                } 
             }
-            const B = available.splice(bestBIdx, 1)[0];
+            const B = availablePlayers.splice(bestBIdx, 1)[0];
 
             // choose opponent pair C,D minimizing opponent interactions and repeated teaming
             let bestPair = null;
             let bestPairScore = Infinity;
-            for (let i = 0; i < available.length; i++) {
-                for (let j = i + 1; j < available.length; j++) {
-                    const C = available[i], D = available[j];
+            for (let i = 0; i < availablePlayers.length; i++) {
+                for (let j = i + 1; j < availablePlayers.length; j++) {
+                    const C = availablePlayers[i], D = availablePlayers[j];
                     const oppScore = ocount(A, C) + ocount(A, D) + ocount(B, C) + ocount(B, D) + 2 * tcount(C, D);
                     if (oppScore < bestPairScore) { bestPairScore = oppScore; bestPair = { i, j, C, D }; }
                 }
             }
 
-            if (!bestPair) { available.unshift(B); available.unshift(A); break; }
+            if (!bestPair) { availablePlayers.unshift(B); availablePlayers.unshift(A); break; }
 
             const { i, j, C, D } = bestPair;
             // remove higher index first
-            available.splice(j, 1);
-            available.splice(i, 1);
+            availablePlayers.splice(j, 1);
+            availablePlayers.splice(i, 1);
 
-            // decide server (equalize serves, tie by original order)
-            const matchPlayers = [A, B, C, D];
-            let server = matchPlayers[0];
-            for (const p of matchPlayers) { 
-                const pc = sCount(p), sc = sCount(server);
-                if (pc < sc || (pc === sc && players.indexOf(p) < players.indexOf(server))) server = p;
-            }
-            incServe(server);
-            const servingTeam = (server === A || server === B) ? 1 : 2;
 
             // decide preferred side
             const prefSide = courtPreferredSide[corts(courtNo - 1)];
             const team1PrefSum = (preferredSideCounts.get(A) || 0) + (preferredSideCounts.get(B) || 0);
             const team2PrefSum = (preferredSideCounts.get(C) || 0) + (preferredSideCounts.get(D) || 0);
-            let givePrefToTeam1 = team1PrefSum < team2PrefSum ? true : team1PrefSum > team2PrefSum ? false : null;
-            if (givePrefToTeam1 === null) givePrefToTeam1 = (servingTeam === 1);
-            const team1Side = givePrefToTeam1 ? prefSide : (prefSide === 'left' ? 'right' : 'left');
-            const team2Side = givePrefToTeam1 ? (prefSide === 'left' ? 'right' : 'left') : prefSide;
-            if (givePrefToTeam1) { preferredSideCounts.set(A, (preferredSideCounts.get(A) || 0) + 1); preferredSideCounts.set(B, (preferredSideCounts.get(B) || 0) + 1); }
-            else { preferredSideCounts.set(C, (preferredSideCounts.get(C) || 0) + 1); preferredSideCounts.set(D, (preferredSideCounts.get(D) || 0) + 1); }
+             let givePrefToTeam1 = team1PrefSum < team2PrefSum ? true : team1PrefSum > team2PrefSum ? false : null;
+            //if preferred side counts are equal, give serve side to team with lowest serve count. 
+            if (givePrefToTeam1 === null) givePrefToTeam1 = sCount(A) + sCount(B) <= sCount(C) + sCount(D);
+            const team1Side = givePrefToTeam1 ? prefSide : (prefSide === CourtSide.SERVE ? CourtSide.RECEIVE : CourtSide.SERVE);
+            const team2Side = givePrefToTeam1 ? (prefSide === CourtSide.SERVE ? CourtSide.RECEIVE : CourtSide.SERVE) : prefSide;
+
+            
+            if (prefSide === CourtSide.SERVE) 
+                {  incServe(A); incServe(B);
+            }
+            else{
+                incServe(C); incServe(D);
+            }
+
+
+            if (givePrefToTeam1) {  
+                preferredSideCounts.set(A, (preferredSideCounts.get(A) || 0) + 1); 
+                preferredSideCounts.set(B, (preferredSideCounts.get(B) || 0) + 1); 
+            }
+            else { 
+                preferredSideCounts.set(C, (preferredSideCounts.get(C) || 0) + 1); preferredSideCounts.set(D, (preferredSideCounts.get(D) || 0) + 1); 
+            }
 
             matches.push({ court: courtNo++, teams: [[A, B], [C, D]], servingTeam, server, sides: { team1: team1Side, team2: team2Side } });
 
