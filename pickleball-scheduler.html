@@ -364,12 +364,9 @@
                     <div class="hint">Duplicates and blanks are removed.</div>
                 </div>
                 <div>
-                    <div class="row" style="justify-content: space-between;">
-                        <label style="margin:0;"> </label>
-                    </div>
                     <div id="courtInputs" class="court-grid" style="margin-top:8px;">
                         <div class="court-row">
-                            <label>Select courts:</label>
+                            <h3>Select courts:</h3>
                             <div style="display:flex;gap:8px;flex-wrap:wrap;">
                                 <label><input type="checkbox" name="courtSelect" value="Court 1">Court 1</label>
                                 <label><input type="checkbox" name="courtSelect" value="Court 2">Court 2</label>
@@ -522,6 +519,20 @@
                 return [used > 0 ? 1 : 0, used, rand() * 0.0001];
             }
 
+            /**
+             * Solves the pairing problem for a given subset of players represented by a bitmask.
+             * This function uses dynamic programming with memoization to find the optimal pairing
+             * of players that minimizes a lexicographical cost, where players are paired in rounds.
+             * 
+             * @param {number} mask - A bitmask representing the set of available players (e.g., bit i set means player i is available).
+             * @returns {Object} An object containing:
+             *   - cost: An array of three numbers representing the cumulative cost (e.g., [cost1, cost2, cost3]).
+             *   - pairs: An array of pairs, where each pair is an array of two player identifiers.
+             * 
+             * The function recursively pairs the first available player (lowest set bit) with each subsequent available player,
+             * computes the cost of the pairing using edgeCost(i, j), and selects the pairing that results in the lexicographically
+             * smallest total cost. Memoization is used to cache results for subproblems.
+             */
             function solve(mask) {
                 if (mask === 0) return { cost: [0, 0, 0], pairs: [] };
                 if (memo.has(mask)) return memo.get(mask);
@@ -753,8 +764,6 @@
                         court: slot.court,
                         serve,
                         receive,
-                        scoreServe: "",
-                        scoreReceive: "",
                     });
                 }
 
@@ -772,9 +781,16 @@
             }
 
             let repeatedOpponentInstances = 0;
-            for (const c of opponentCounts.values()) {
-                if (c > 1) repeatedOpponentInstances += (c - 1);
+            for (const[player,count] of opponentCounts.entries()) {
+                if (count > 1) {
+                    repeatedOpponentInstances += (count - 1);
+                    console.log("opponent pair", player, count);
+                }
             }
+    //      for (const c of opponentCounts.values()) {
+    //         if (c > 1) repeatedOpponentInstances += (c - 1);
+    //          console.log("opponent pair", c);
+    //     }
 
             return {
                 players: allPlayers,
@@ -789,14 +805,17 @@
             if (gamesPerRound === 0) throw new Error("Need at least one full game (4 players).");
 
             const attempts = Math.max(40, Math.min(220, rounds * 30));
-            let best = null;
-            for (let i = 0; i < attempts; i++) {
-                const candidateSeed = (seed || "auto") + "::try::" + i;
-                const cand = buildScheduleCandidate(players, courtNames, rounds, candidateSeed);
-                if (!best || lexLess(cand.metric, best.metric)) best = cand;
-            }
+            const candidateSeed = (seed || "auto") + "::try::" + 0;
+            const best = buildScheduleCandidate(players, courtNames, rounds, candidateSeed);
+            //       let best = null;
+            //       for (let i = 0; i < attempts; i++) {
+            //           const candidateSeed = (seed || "auto") + "::try::" + i;
+            //           const cand = buildScheduleCandidate(players, courtNames, rounds, candidateSeed);
+            //           if (!best || lexLess(cand.metric, best.metric)) best = cand;
+            //      }
 
             const warnings = [];
+            warnings.push("repeated Pair Instances: " + best.metric[0] + ", repeated Pair Types: " + best.metric[1] + ", repeated Opponent Instances: " + best.metric[2]);
             if (best.metric[0] > 0) {
                 warnings.push("Some partner repeats were unavoidable for the selected players/courts/rounds.");
             } else {
