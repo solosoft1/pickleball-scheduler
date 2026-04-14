@@ -40,6 +40,76 @@ function shuffle(array) {
     return array;
 }
 
+const solver = require("javascript-lp-solver");
+
+function solveTennis(xPlayers, rounds) {
+    const numCourts = Math.floor(xPlayers / 4);
+    const model = {
+        optimize: "spread",
+        opType: "min",
+        constraints: {},
+        variables: {},
+        ints: {},
+        binaries: {}
+    };
+
+    // Helper to generate variable names
+    const getVar = (p, r, c, s) => `play_p${p}_r${r}_c${c}_s${s}`;
+
+    for (let r = 0; r < rounds; r++) {
+        // Constraint: Each player plays at most once per round
+        for (let p = 0; p < xPlayers; p++) {
+            const cName = `player_${p}_round_${r}`;
+            model.constraints[cName] = { max: 1 };
+            for (let c = 0; c < numCourts; c++) {
+                for (let s = 0; s < 2; s++) {
+                    const vName = getVar(p, r, c, s);
+                    model.variables[vName] = model.variables[vName] || { spread: 0 };
+                    model.variables[vName][cName] = 1;
+                    model.binaries[vName] = 1;
+                }
+            }
+        }
+
+        // Constraint: Each side of each court has exactly 2 players
+        for (let c = 0; c < numCourts; c++) {
+            for (let s = 0; s < 2; s++) {
+                const cName = `court_${c}_side_${s}_round_${r}`;
+                model.constraints[cName] = { equal: 2 };
+                for (let p = 0; p < xPlayers; p++) {
+                    model.variables[getVar(p, r, c, s)][cName] = 1;
+                }
+            }
+        }
+    }
+
+    // Site Balancing Logic
+    // We minimize (max_pref - min_pref) by setting objective to 'spread'
+    model.variables.max_pref = { spread: 1 };
+    model.variables.min_pref = { spread: -1 };
+
+    for (let p = 0; p < xPlayers; p++) {
+        const maxC = `max_pref_p${p}`;
+        const minC = `min_pref_p${p}`;
+        model.constraints[maxC] = { max: 0 }; // total_pref - max_pref <= 0
+        model.constraints[minC] = { min: 0 }; // total_pref - min_pref >= 0
+
+        for (let r = 0; r < rounds; r++) {
+            for (let c = 0; c < numCourts; c++) {
+                const vName = getVar(p, r, c, 0); // Side 0 is preferred
+                model.variables[vName][maxC] = 1;
+                model.variables[vName][minC] = 1;
+            }
+        }
+        model.variables.max_pref[maxC] = -1;
+        model.variables.min_pref[minC] = -1;
+    }
+
+    return solver.Solve(model);
+}
+
+
+
 function scheduleDoublesRoundRobin(playersInput, courts, rounds = 1) {
     const players = makePlayers(playersInput);
     const n = players.length;
@@ -169,4 +239,4 @@ function scheduleDoublesRoundRobin(playersInput, courts, rounds = 1) {
     return schedule;
 }
 
-module.exports = { scheduleDoublesRoundRobin };
+module.exports = { scheduleDoublesRoundRobin, solveTennis};
