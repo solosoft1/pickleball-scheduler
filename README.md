@@ -1,2 +1,1 @@
-# pickleball-scheduler
-A round robin scheduler for scheduling n number of players on m number of courts for x rounds.  Doubles play
+A new Pickleball Scheduler based on Travis Pickleball Scheduler with scoring removed.
